@@ -1,10 +1,8 @@
 import itertools
 import os
 from collections import namedtuple
-
 import pandas as pd
 from query_bundle import QueryBundle
-from typing import Union
 import sqlite3
 from tableauhyperapi import HyperProcess, Telemetry, Connection, CreateMode, NOT_NULLABLE, NULLABLE, \
     SqlType, TableDefinition, Inserter, escape_name, escape_string_literal, HyperException, TableName
@@ -155,7 +153,7 @@ class QueryIterator:
         for query_bundle in self.query_bundles:
             export_file_name = query_bundle.export_file_name
             hyper_table_name = f"{query_bundle.export_file_name}.hyper"
-            with Connection(hyper.endpoint, hyper_table_name, CreateMode.CREATE_AND_REPLACE) as connection:
+            with Connection(hyper.endpoint, hyper_table_name, CreateMode.CREATE) as connection:
                 for query in query_bundle.queries:
                     query_name = query.query_name
                     print(f"Starting hyper conversion of table {query_name}")

@@ -11,7 +11,7 @@ def create_query_bundles():
         query_strings=["SELECT company, company_response_to_consumer, COUNT(company_response_to_consumer) FROM consumer_complaints.sheetGROUP BY company, company_response_to_consumer"
         ],
         query_names = ['complaint_counts_by_company'],
-        matches=['consumer_complaints.csv'],
+        matches=['consumer_complaints.xlsx'], # Matches can be any substring of a file in the current directory unique to that file
         sheets=['DEL'],
         combine_columns=True
     )

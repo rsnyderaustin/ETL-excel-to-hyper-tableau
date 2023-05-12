@@ -12,9 +12,9 @@ from fsheet import Fsheet
 
 
 class QueryIterator:
-
     def __init__(self, directory: list, database_path: str, query_bundles: list[QueryBundle]):
         self.directory = directory
+
         self.database_path = database_path
 
         # Distinct (file, sheet) pair objects
@@ -23,9 +23,9 @@ class QueryIterator:
 
         self.query_bundles = query_bundles
 
-    def run(self):
+    def process_queries(self):
 
-        # Stores each distinct and associated file name pair {match: import_file_name}
+        # Pairs each match to its associated file name
         self._match_directory_files()
 
         self._generate_distinct_fsheets()
@@ -95,9 +95,8 @@ class QueryIterator:
         sql_connection.close()
 
     def _query_dataframes(self):
-        # Required so that column names pulled from different years in the data are specific to their year
+        # Required so that column names pulled from different files in the data are specific to their associated file
         def format_column_names(df, match) -> list:
-
             columns = df.columns
             new_column_names = []
             for column_name in columns:
@@ -128,13 +127,12 @@ class QueryIterator:
 
     def _export_to_hyper(self, hyper: HyperProcess):
 
-        # Column 0 = query-specific match
-        # Rest of values are grouped by column
+        # Column 0 denotes each row's query-specific match
         def _combine_columns(tuples) -> pd.DataFrame:
             # {column_name: [column_data]}
             new_columns = {}
 
-            # First column is query-specific matches, should be string values
+            # Establish the query-specific match for each row in column 0
             index_col_name = 'match'
             new_columns[index_col_name] = []
             for tuple in tuples:
@@ -153,7 +151,6 @@ class QueryIterator:
             return pd.DataFrame(new_columns)
 
         for query_bundle in self.query_bundles:
-            export_file_name = query_bundle.export_file_name
             hyper_table_name = f"{query_bundle.export_file_name}.hyper"
             with Connection(hyper.endpoint, hyper_table_name, CreateMode.CREATE_AND_REPLACE) as connection:
                 for query in query_bundle.queries:

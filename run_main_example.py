@@ -48,11 +48,11 @@ def _prompt_export_file_path():
 def main():
     query_bundles = create_query_bundles()
 
-    # If you would like to use a different file or set of files for querying, please change the directory assignment
-    # here to that file name. The file should be placed into the ETL-excel-to-hyper-tableau folder on your machine.
-    # Remember that you will have to change the query as well to refer to your table and its specific data.
+    # If you would like to use a different file or set of files for querying, make sure to add those files to the
+    # working directory.
+    # Remember that query will have to be changed as well to refer to the Excel file and its specific data.
     database_path = _prompt_export_file_path()
-    query_iterator = QueryIterator(directory=['consumer_complaints.xlsx', 'consumer_complaints1.xlsx'],
+    query_iterator = QueryIterator(directory=os.listdir(),
                                    database_path=database_path,
                                    query_bundles=query_bundles)
     query_iterator.process_queries()

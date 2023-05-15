@@ -54,7 +54,7 @@ class QueryIterator:
                 if extension in (".xlsx", ".xls"):
                     filtered_directory.append(file_name)
             if len(filtered_directory) == 0:
-                raise Exception("No excel files found in the current directory")
+                raise Exception("No excel files found in the current working directory.")
             return filtered_directory
 
         # Helper
@@ -63,7 +63,7 @@ class QueryIterator:
                 if str(match) in file_name:
                     return file_name
             # Error if no match is found
-            raise Exception(f"{match} has no associated file name in the current directory")
+            raise Exception(f"Specified match {match} has no associated file name in the current directory")
 
         # Main function begins here
         filtered_directory = filter_directory(self.directory)

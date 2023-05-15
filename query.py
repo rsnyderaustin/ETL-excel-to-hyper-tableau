@@ -4,10 +4,10 @@ import re
 
 class Query:
 
-    def __init__(self, query_name: str, query_str: str, combine_columns: bool):
-        self.query_name = query_name
+    def __init__(self, query_name: str, query_str: str, pivot_table: bool):
         self.query_str = query_str
-        self.combine_columns = combine_columns
+        self.pivot_table = pivot_table
+        self.query_name = query_name
 
     # Replaces each "sheet_name.sheet" in the query to include the properly formatted file name
     def format_query(self, file_name: str):

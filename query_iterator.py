@@ -210,9 +210,9 @@ class QueryIterator:
 
         table_def_columns = []
         # {column_name: SqlType}
-        columns_and_sql_types = df_columns_sqltypes(df)
-        for col in columns_and_sql_types:
-            sql_type = columns_and_sql_types[col]
+        col_sql_types = df_columns_sqltypes(df)
+        for col in col_sql_types:
+            sql_type = col_sql_types[col]
 
             new_table_def_column = TableDefinition.Column(name=col, type=sql_type)
             table_def_columns.append(new_table_def_column)

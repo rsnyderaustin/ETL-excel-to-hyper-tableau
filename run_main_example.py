@@ -16,7 +16,7 @@ def create_query_bundles():
                        "WHERE company='Bank of America'"
                        "GROUP BY product "
                        "HAVING COUNT(company_response_to_consumer)>10",
-                       "SELECT company, COUNT(company) "
+                       "SELECT company, COUNT(company) as number_of_complaints "
                        "FROM Sheet1.sheet "
                        "GROUP BY company "
         ],

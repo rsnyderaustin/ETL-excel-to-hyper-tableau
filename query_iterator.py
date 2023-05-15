@@ -131,63 +131,23 @@ class QueryIterator:
     def _export_to_hyper(self, hyper: HyperProcess):
         # Column 0 denotes each row's query-specific match
         def _pivot_df(file_dataframe_tuples) -> pd.DataFrame:
+            # Column names of df are the same column names as the original dataframes
             sample_df = file_dataframe_tuples[0].queried_df
-            pivoted_columns = sample_df.index.tolis()
-            
+            aggregate_df_dict = {}
+            aggregate_df_dict['index'] = []
+            aggregate_df_dict.update({col: [] for col in sample_df.columns.tolist()})
 
-
-
-            """# {column_name: [column_data]}
-            new_columns = {}
-
-            index_col_name = 'query_file_index'
-            new_columns[index_col_name] = []
-
-            sample_tuple = file_dataframe_tuples[0]
-            sample_df = sample_tuple.queried_df
-            for column in sample_df.columns:
-                new_columns[column] = []
             for tuple in file_dataframe_tuples:
-                new_columns[index_col_name].append(str(tuple.file_name))
+                # Add the current file name to the index for the number of rows in that queried dataframe
+                base, extension = os.path.splitext(tuple.file_name)
+                aggregate_df_dict['index'].extend([base] * len(tuple.queried_df))
 
-            # Establish column names
-            sample_df = file_dataframe_tuples[0].queried_df
-            for column in sample_df.columns.tolist():
-                new_columns[column] = []
+                # Add the values in the current tuple dataframe to the aggregate df
+                for col in tuple.queried_df.columns:
+                    aggregate_df_dict[col].extend(tuple.queried_df[col])
 
-            # Fill dictionary with data
-            dataframes = [tuple.queried_df for tuple in file_dataframe_tuples]
-            for df in dataframes:
-                for col_name, col_values in df.items():
-                    new_columns[col_name].extend(col_values)
-            return pd.DataFrame(new_columns)"""
-
-        """# Returns a list of rows, with each row representing an index of the aggregate of method DataFrames
-        def _aggregate_dataframes(self, dataframes: list[pd.DataFrame]) -> list[list]:
-            max_df_length = 0
-            df_col_length: dict[str, int] = {}
-    
-            df_aggregate_rows = []
-    
-            # Finds the max length of all dataframes, and fills df_col_length dict for each column
-            for df in dataframes:
-                if len(df) > max_df_length:
-                    max_df_length = len(df)
-                for col in df.columns:
-                    df_col_length[col] = len(df[col])
-    
-            # 'i' represents the row index that is currently being processed
-            for i in range(max_df_length):
-                df_aggregate_rows.append([])
-                for df in dataframes:
-                    for col in df.columns:
-                        column_data = df[col]
-                        column_length = len(column_data)
-                        if i < column_length:
-                            df_aggregate_rows[i].append(column_data[i])
-                        else:
-                            df_aggregate_rows[i].append(None)
-            return df_aggregate_rows"""
+            aggregate_df = pd.DataFrame(aggregate_df_dict)
+            return aggregate_df
 
         def cleanup_SQL_tables(database_path):
             sql_connnection = sqlite3.connect(database_path)
@@ -200,14 +160,14 @@ class QueryIterator:
             sql_connnection.close()
 
         for query_bundle in self.query_bundles:
-            hyper_table_name = f"{query_bundle.export_file_name}.hyper"
-            with Connection(hyper.endpoint, hyper_table_name, CreateMode.CREATE_AND_REPLACE) as connection:
+            with Connection(hyper.endpoint, query_bundle.export_file_name, CreateMode.CREATE_AND_REPLACE) as connection:
                 for query in query_bundle.queries:
-                    file_dataframe_tuples = query_bundle.queried_dfs_by_query_name[query.query_name]
+                    # Each query uses all dataframes in the QueryBundle
+                    dataframes = query_bundle.queried_dfs_by_query_name[query.query_name]
                     if query.pivot_table:
-                        df = _pivot_df(file_dataframe_tuples)
+                        df = _pivot_df(dataframes)
                     else:
-                        list_of_dataframes = [tuple.queried_df for tuple in file_dataframe_tuples]
+                        list_of_dataframes = [tuple.queried_df for tuple in dataframes]
                         df = pd.concat(list_of_dataframes, axis=1)
                     row_data = df.values.tolist()
 
@@ -234,9 +194,9 @@ class QueryIterator:
                 "float": SqlType.double(),
                 "float64": SqlType.double(),
                 "datetime": SqlType.timestamp(),
-                "string": SqlType.varchar(50),
-                "object": SqlType.varchar(50),
-                "'O'": SqlType.varchar(50)
+                "string": SqlType.varchar(1000),
+                "object": SqlType.varchar(1000),
+                "'O'": SqlType.varchar(1000)
 
             }
 

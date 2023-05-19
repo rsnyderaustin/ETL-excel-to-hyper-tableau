@@ -4,6 +4,7 @@ from query import Query
 class QueryBundle:
 
     def __init__(self, export_file_name: str,
+                 file_extension: str,
                  matches: Iterable,
                  pivot_table: dict[str: bool],
                  query_strings: Union[str, list[str]],
@@ -24,10 +25,11 @@ class QueryBundle:
         :param query_names:
         :param sheets: An iterable of all Excel sheet names referred to in query_strings.
         """
-
+        self.export_file_name = export_file_name
+        self.file_extension = file_extension
         self.matches = matches
         self.sheets = sheets
-        self.pivot_table: bool = pivot_table
+        self.pivot_table: dict[str: bool] = pivot_table
         self.export_file_name = f"{export_file_name}.hyper"
         self.queried_dfs_by_query_name = {}
 

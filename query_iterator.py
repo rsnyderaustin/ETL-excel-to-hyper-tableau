@@ -9,6 +9,7 @@ import sqlite3
 from tableauhyperapi import HyperProcess, Telemetry, Connection, CreateMode, NOT_NULLABLE, NULLABLE, \
     SqlType, TableDefinition, Inserter, escape_name, escape_string_literal, HyperException, TableName
 from fsheet import Fsheet
+from openpyxl import Workbook
 
 
 class QueryIterator:
@@ -41,8 +42,17 @@ class QueryIterator:
         # Each QueryBundle has a unique export file name
         self._query_dataframes()
 
-        with HyperProcess(Telemetry.DO_NOT_SEND_USAGE_DATA_TO_TABLEAU, "hyperfile.log") as hyper:
-            self._export_to_hyper(hyper)
+        for query_bundle in self.query_bundles:
+            if query_bundle.file_extension in '.hyper':
+                with HyperProcess(Telemetry.DO_NOT_SEND_USAGE_DATA_TO_TABLEAU, "hyperfile.log") as hyper:
+                    self._export_to_hyper(query_bundle, hyper)
+            elif query_bundle.file_extension in ['.xlsx', '.xls']:
+                file_name = f"{query_bundle.export_file_name}{query_bundle.file_extension}"
+                if os.path.exists(file_name):
+                    os.remove(file_name)
+                workbook = Workbook()
+                workbook.save(filename=file_name)
+                self._export_to_excel(query_bundle, workbook)
 
     # Pairs matches with appropriate files, match:file_name
     def _match_directory_files(self):
@@ -128,62 +138,78 @@ class QueryIterator:
                     query_bundle.queried_dfs_by_query_name[query.query_name].append(file_dataframe_tuple)
         sql_connection.close()
 
-    def _export_to_hyper(self, hyper: HyperProcess):
+    def _pivot_df(self, file_dataframe_tuples) -> pd.DataFrame:
+        # Column names of df are the same column names as the original dataframes
+        sample_df = file_dataframe_tuples[0].queried_df
+        aggregate_df_dict = {}
+        aggregate_df_dict['index'] = []
+        aggregate_df_dict.update({col: [] for col in sample_df.columns.tolist()})
+
+        for tuple in file_dataframe_tuples:
+            # Add the current file name to the index for the number of rows in that queried dataframe
+            base, extension = os.path.splitext(tuple.file_name)
+            aggregate_df_dict['index'].extend([base] * len(tuple.queried_df))
+
+            # Add the values in the current tuple dataframe to the aggregate df
+            for col in tuple.queried_df.columns:
+                aggregate_df_dict[col].extend(tuple.queried_df[col])
+
+        aggregate_df = pd.DataFrame(aggregate_df_dict)
+        return aggregate_df
+
+    def _cleanup_SQL_tables(self, database_path):
+        sql_connnection = sqlite3.connect(database_path)
+        cursor = sql_connnection.cursor()
+        cursor.execute("SELECT name FROM sqlite_master WHERE type='table';")
+        tables = cursor.fetchall()
+        for table in tables:
+            cursor.execute(f"DROP TABLE IF EXISTS {table[0]};")
+        sql_connnection.commit()
+        sql_connnection.close()
+
+    def _export_to_hyper(self, query_bundle: QueryBundle, hyper: HyperProcess):
         # Column 0 denotes each row's query-specific match
-        def _pivot_df(file_dataframe_tuples) -> pd.DataFrame:
-            # Column names of df are the same column names as the original dataframes
-            sample_df = file_dataframe_tuples[0].queried_df
-            aggregate_df_dict = {}
-            aggregate_df_dict['index'] = []
-            aggregate_df_dict.update({col: [] for col in sample_df.columns.tolist()})
 
-            for tuple in file_dataframe_tuples:
-                # Add the current file name to the index for the number of rows in that queried dataframe
-                base, extension = os.path.splitext(tuple.file_name)
-                aggregate_df_dict['index'].extend([base] * len(tuple.queried_df))
+        with Connection(hyper.endpoint, query_bundle.export_file_name, CreateMode.CREATE_AND_REPLACE) as connection:
+            for query in query_bundle.queries:
+                # Each query uses all dataframes in the QueryBundle
+                dataframes = query_bundle.queried_dfs_by_query_name[query.query_name]
+                if query.pivot_table:
+                    df = self._pivot_df(dataframes)
+                else:
+                    list_of_dataframes = [tuple.queried_df for tuple in dataframes]
+                    df = pd.concat(list_of_dataframes, axis=1)
+                row_data = df.values.tolist()
 
-                # Add the values in the current tuple dataframe to the aggregate df
-                for col in tuple.queried_df.columns:
-                    aggregate_df_dict[col].extend(tuple.queried_df[col])
+                df_hyper_columns = self._create_df_column_objects(df)
 
-            aggregate_df = pd.DataFrame(aggregate_df_dict)
-            return aggregate_df
+                table_def = TableDefinition(query.query_name, df_hyper_columns)
 
-        def cleanup_SQL_tables(database_path):
-            sql_connnection = sqlite3.connect(database_path)
-            cursor = sql_connnection.cursor()
-            cursor.execute("SELECT name FROM sqlite_master WHERE type='table';")
-            tables = cursor.fetchall()
-            for table in tables:
-                cursor.execute(f"DROP TABLE IF EXISTS {table[0]};")
-            sql_connnection.commit()
-            sql_connnection.close()
+                connection.catalog.create_table(table_def)
 
-        for query_bundle in self.query_bundles:
-            with Connection(hyper.endpoint, query_bundle.export_file_name, CreateMode.CREATE_AND_REPLACE) as connection:
-                for query in query_bundle.queries:
-                    # Each query uses all dataframes in the QueryBundle
-                    dataframes = query_bundle.queried_dfs_by_query_name[query.query_name]
-                    if query.pivot_table:
-                        df = _pivot_df(dataframes)
-                    else:
-                        list_of_dataframes = [tuple.queried_df for tuple in dataframes]
-                        df = pd.concat(list_of_dataframes, axis=1)
-                    row_data = df.values.tolist()
+                with Inserter(connection, table_def) as inserter:
+                    for row in row_data:
+                        inserter.add_row(row)
+                    inserter.execute()
 
-                    df_hyper_columns = self._create_df_column_objects(df)
+                self.cleanup_SQL_tables(self.database_path)
 
-                    table_def = TableDefinition(query.query_name, df_hyper_columns)
+    def _export_to_excel(self, query_bundle:QueryBundle, workbook: Workbook):
+        file_name = f"{query_bundle.export_file_name}{query_bundle.file_extension}"
+        writer = pd.ExcelWriter(file_name, engine='openpyxl')
 
-                    connection.catalog.create_table(table_def)
+        for query in query_bundle.queries:
+            # Each query uses all dataframes in the QueryBundle
+            dataframes = query_bundle.queried_dfs_by_query_name[query.query_name]
+            if query.pivot_table:
+                df = self._pivot_df(dataframes)
+            else:
+                list_of_dataframes = [tuple.queried_df for tuple in dataframes]
+                df = pd.concat(list_of_dataframes, axis=1)
 
-                    with Inserter(connection, table_def) as inserter:
-                        for row in row_data:
-                            inserter.add_row(row)
-                        inserter.execute()
-
-                    cleanup_SQL_tables(self.database_path)
-
+            df.to_excel(writer, sheet_name=query.query_name, index=False)
+        writer._save()
+        writer.close()
     @staticmethod
     # Creates HyperAPI.Column objects
     def _create_df_column_objects(df: pd.DataFrame) -> list[TableDefinition.Column]:

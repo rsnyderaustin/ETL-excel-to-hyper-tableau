@@ -8,8 +8,9 @@ from tkinter import Tk, filedialog
 
 
 def create_query_bundles():
-    complaints_by_bank = QueryBundle(
+    data = QueryBundle(
         export_file_name="complaints_by_bank",
+        file_extension='.xlsx',
         query_strings=["SELECT company, product, "
                        "COUNT(product) as number_of_complaints "
                        "FROM Sheet1.sheet "
